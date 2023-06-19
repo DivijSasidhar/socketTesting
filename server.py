@@ -26,7 +26,8 @@ def start_server(host, port):
 def accept_connections(s):
     Client, address = s.accept()
     print('Connected to: ' + address[0] + ':' + str(address[1]))
-    start_new_thread(client_handler, (Client, ))
+    start_new_thread(client_handler, (Client, ))  # TODO: i dont think i need a new thread for each socket
+    #                                                   https://medium.com/fantageek/understanding-socket-and-port-in-tcp-2213dc2e9b0c
 
 
 def client_handler(connection):
@@ -64,22 +65,25 @@ def login(message, connection):
 def createaccount(message, connection):
     username = (message.split("USERNAME")[1].split("PASSWORD"))[0].strip()
     password = (message.split("USERNAME")[1].split("PASSWORD"))[1].strip()
-    f = open('savefile.json', 'r+')
+    admin_status = False
+    f = open('savefile.json', 'r')
     data = json.load(f)
     for i in data['userDB']:
         if username.lower() == i['username'].lower():
             connection.send(bytes("CREATIONFAILURE", 'utf-8'))
             f.close()
             return
-    new_user_info = {"username": username,
-                     "password": password}
     # my JSON format is a dictionary with a key 'userDB', its value being a list, and each element in the list
     # is a dictionary of user info. that might be why i was struggling to parse and write to it.
+    new_user_info = {"username": username,
+                     "password": password,
+                     "admin": admin_status}
     data['userDB'].append(new_user_info)
     new_data = json.dumps(data, indent=4)
     f.close()
     f = open('savefile.json', 'w')  # reopens the file to overwrite
-    f.write(new_data)
+    f.write(new_data)  # FIXME: rewriting file every time means users can overwrite each other - create shadow
+    #                       versions to give each user, then queue changes in server (or something like that)
     connection.send(bytes("CREATIONSUCCESS", 'utf-8'))
     f.close()
 
