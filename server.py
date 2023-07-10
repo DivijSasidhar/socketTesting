@@ -6,6 +6,11 @@ from _thread import *
 # https://realpython.com/python-sockets/
 # https://www.dunebook.com/creating-a-python-socket-server-with-multiple-clients/
 
+# TODO: create a terminal - act on players (disconnect), the save file (scan through to make sure all names r legit)
+# TODO: create a log of every time server runs, who connects, who disconnects, what actions terminal does, timestamps
+#   if no server logs found in server's directory, ask if user has set up server properly for play
+# TODO: lag sending info for login and create account (esp create account) to avoid spam
+
 host = '127.0.0.1'
 port = 65535
 ThreadCount = 0  # number of connections
@@ -26,26 +31,34 @@ def start_server(host, port):
 def accept_connections(s):
     Client, address = s.accept()
     print('Connected to: ' + address[0] + ':' + str(address[1]))
-    start_new_thread(client_handler, (Client, ))  # TODO: i dont think i need a new thread for each socket
-    #                                                   https://medium.com/fantageek/understanding-socket-and-port-in-tcp-2213dc2e9b0c
+    start_new_thread(client_handler, (Client, ))
 
 
 def client_handler(connection):
-    print("Connection number " + str(ThreadCount) + ".")
+    # TODO: needs to send data to send to confirm that its the server (also send time updates)
+    #   maybe have a hash online to compare to
+    connection.setblocking(False)
     while True:
-        data = connection.recv(1024).decode('utf-8')
-        split_data = data.split(" ", 1)
-        dataID = (split_data[0])  # each thing that the client sends will have an ID labeling what its trying to do
-        #  and a message accompanying it sometimes
         try:
-            message = (split_data[1])
-        except IndexError:
-            message = ""  # if theres just an ID, set the message to nothing
+            data = connection.recv(1024).decode('utf-8')
+            split_data = data.split(" ", 1)
+            dataID = (split_data[0])  # each thing that the client sends will have an ID labeling what its trying to do
+            #  and a message accompanying it sometimes
+            try:
+                message = (split_data[1])
+            except IndexError:
+                message = ""  # if theres just an ID, set the message to nothing
+        except BlockingIOError:
+            # waiting
+            data = ""
+            dataID = data
+            message = dataID
         if dataID == "LOGIN":
             login(message, connection)
         if dataID == "CREATE":
             createaccount(message, connection)
-    connection.close()  # FIXME: make code reachable by letting user disconnect via input
+        if dataID == "CLOSE":
+            connection.close()
 
 
 def login(message, connection):
@@ -82,8 +95,10 @@ def createaccount(message, connection):
     new_data = json.dumps(data, indent=4)
     f.close()
     f = open('savefile.json', 'w')  # reopens the file to overwrite
-    f.write(new_data)  # FIXME: rewriting file every time means users can overwrite each other - create shadow
+    f.write(new_data)  # optimize: rewriting file every time means users can overwrite each other - create shadow
     #                       versions to give each user, then queue changes in server (or something like that)
+    #                       also when closing server upload file online so that multiple servers can run at once
+    #                       and itll still be the same game
     connection.send(bytes("CREATIONSUCCESS", 'utf-8'))
     f.close()
 
