@@ -35,8 +35,7 @@ def accept_connections(s):
 
 
 def client_handler(connection):
-    # TODO: needs to send data to send to confirm that its the server (also send time updates)
-    #   maybe have a hash online to compare to
+    connection.sendall(b'HANDSHAKE')  # todo: temporary
     connection.setblocking(False)
     while True:
         try:

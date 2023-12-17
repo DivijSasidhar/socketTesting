@@ -2,17 +2,32 @@ import socket
 from hashlib import sha256
 import time
 import pygame
-# TODO render all fonts with the font_name.render(text, True, (0, 0, 0)) at the beginning
+# TODO render all fonts with the font_name.render(text, True, (0, 0, 0)) at the beginning except for the dynamic ones
+#   username, password, etc
 # stuff for me
 pygame.init()
 red = (255, 0, 0)
 black = (0, 0, 0)
 gray = (127, 127, 127)
 white = (255, 255, 255)
+
+valid_IP_keys = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "."]
+valid_username_keys = [pygame.K_a, pygame.K_b, pygame.K_c, pygame.K_d, pygame.K_e, pygame.K_f, pygame.K_g, pygame.K_h,
+                       pygame.K_i, pygame.K_j, pygame.K_k, pygame.K_l, pygame.K_m, pygame.K_n, pygame.K_o, pygame.K_p,
+                       pygame.K_q, pygame.K_r, pygame.K_s, pygame.K_t, pygame.K_u, pygame.K_v, pygame.K_w, pygame.K_x,
+                       pygame.K_y, pygame.K_z, pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5, pygame.K_6,
+                       pygame.K_7, pygame.K_8, pygame.K_9, pygame.K_0, pygame.K_MINUS]
+connection_error = None
+loading = False
 monospaced_font = pygame.font.Font("Courier Std Medium.otf", 36)
 not_ugly_font = pygame.font.Font("YsabeauInfant.ttf", 30)
 button_text_font = pygame.font.Font("YsabeauInfant.ttf", 40)
-pygame.font.get_fonts()
+
+
+#  LOAD ALL TEXT
+
+TXT_enter_server_IP = not_ugly_font.render("Enter server IP:", True, (0, 0, 0))
+RECT_enter_server_IP = pygame.Rect(25, 225, 350, 50)  # hardcoding values, in the "game" the window will be resizeable
 
 PORT = 65535  # The port used by the server
 
@@ -25,7 +40,6 @@ PORT = 65535  # The port used by the server
 # TODO: currently all calls are blocking, when game starts use s.setblocking(False) to set them to non-blocking
 #   use a try-except and catch BlockingIOError bc data transmission isnt instant
 #   (can also use time to determine ping)
-# TODO: medieval styled game maybe
 # port forwarding, static IPs
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -58,6 +72,7 @@ def login():
         pygame.draw.rect(screen, black, password_box, 2)
         password_txt = not_ugly_font.render("Password:", True, (0, 0, 0))
         screen.blit(password_txt, (password_box.x, password_box.y - 40))
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT or event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 exit()
@@ -93,7 +108,8 @@ def login():
                         username_active = True
                 else:
                     if username_active:
-                        if len(username) < 15:  # TODO: only allow certain characters to be inputted into username
+                        if len(username) < 15 and event.key in valid_username_keys:
+                            # TODO: only allow certain characters to be inputted into username
                             username += event.unicode
                         else:
                             pygame.draw.rect(screen, red, username_box, 2)
@@ -101,6 +117,7 @@ def login():
                         password += event.unicode
                         #   if text is bigger than box, shift it to the left the length of one character, if that
                         # goes outside of the box / margin then delete it
+
         username_display = monospaced_font.render(username, True, (0, 0, 0))
         screen.blit(username_display, (username_box.x + 5, username_box.y + 9))
         password_display = monospaced_font.render("*"*len(password[:15]), True, (0, 0, 0))  # optimize it looks ugly
@@ -148,13 +165,20 @@ def createaccount():
                     elif password_active:
                         password = password[:-1]
                 elif event.key == pygame.K_RETURN:
-                    s.sendall(bytes("CREATE USERNAME " + username + " PASSWORD "
-                                    + sha256(password.encode('utf-8')).hexdigest(), "utf-8"))
-                    data = s.recv(1024)
-                    if data == bytes("CREATIONSUCCESS", 'utf-8'):
-                        return "success"
-                    if data == bytes("CREATIONFAILURE", 'utf-8'):
-                        return
+                    if 2 < len(username) < 15:
+                        if 3 < len(password):
+                            s.sendall(bytes("CREATE USERNAME " + username + " PASSWORD "
+                                            + sha256(password.encode('utf-8')).hexdigest(), "utf-8"))
+                            data = s.recv(1024)
+                            if data == bytes("CREATIONSUCCESS", 'utf-8'):
+                                return "success"
+                            if data == bytes("CREATIONFAILURE", 'utf-8'):
+                                return
+                        else:
+                            pygame.draw.rect(screen, red, password_box, 2)
+                    else:
+                        pygame.draw.rect(screen, red, username_box, 2)
+
                 elif event.key == pygame.K_TAB:
                     if username_active or password_active:
                         username_active = not username_active
@@ -162,8 +186,9 @@ def createaccount():
                     else:
                         username_active = True
                 else:
-                    if username_active:
-                        username += event.unicode   # TODO: set limits for usernames (size = 15 and characters)
+                    if username_active and len(username) < 15 \
+                     and event.key in valid_username_keys:
+                        username += event.unicode
                     elif password_active:
                         password += event.unicode
                         #   if text is bigger than box, shift it to the left the length of one character, if that
@@ -200,7 +225,7 @@ def accountsys():
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if login_button.collidepoint(event.pos):
                     if login() == "success":
-                        print("Success!")
+                        print("Success!")  # todo final line
                     else:
                         print("incorrect username or password")
                         # TODO: fail
@@ -215,68 +240,64 @@ def accountsys():
 
 
 def attempt_connection():
-    loading = True
     if user_text == "":  # makes host the user input (unless blank, then its local)
         HOST = "127.0.0.1"
     else:
         HOST = user_text
-    try:  # TODO: instead of writing all of this code here, write it all when the function is called
-        #       try attempt_connection except socket.gaierror except connectionrefusederror
-        s.connect((HOST, PORT))
-    except socket.gaierror:
-        incorrect_server_ip = True
-        loading = False
-        return
-    except ConnectionRefusedError:
-        server_offline = True
-        loading = False
-        # maybe have a variable like "error message active" and then have the variable on for 5 seconds, and display
-        # while active
-        return
-    except TimeoutError:
-        error_server_offline = True
-        error_loading = False
-        return
-    except OSError as exc:
-        if exc.errno == 10056:
-            loading = False
-            accountsys()
-    except:
-        loading = False
-    accountsys()  # TODO: move this out of the try
-    return
+    s.connect((HOST, PORT))
+    handshake = s.recv(1024)
+    if handshake == b'HANDSHAKE':  # todo: temporary lol
+        accountsys()
+    # IF connected, go to accountsys()
 
 
 while running:
-    screen.fill(white)         # (screen dimension / 2) - (box dimension / 2) is in the middle
-    startup_txt = not_ugly_font.render("Enter server IP:", True, (0, 0, 0))
-    screen.blit(startup_txt, (105, 180))
-    server_ip_box = pygame.Rect(25, 225, 350, 50)  # hardcoding values rn, in the game the box will be resizeable
-    server_ip_button_display = pygame.draw.rect(screen, black, server_ip_box, 2)
+    screen.fill(white)
+    screen.blit(TXT_enter_server_IP, (105, 180))
+    pygame.draw.rect(screen, black, RECT_enter_server_IP, 2)
+    if loading:
+        print("loading")  # todo
+    if connection_error is not None:
+        if connection_error == 0:
+            print("invalid IP")  # todo write to screen
+        elif connection_error == 1:
+            print("server offline or invalid IP")
+        else:
+            print(connection_error)  # todo maybe have a better way to write this but oh well
+            time.sleep(5)
+            exit()
     for event in pygame.event.get():
         if event.type == pygame.QUIT or event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            exit()
-        # does text input
+            running = False
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_BACKSPACE:
                 user_text = user_text[:-1]
-            elif event.key == pygame.K_0 or event.key == pygame.K_1 or event.key == pygame.K_2 or \
-                    event.key == pygame.K_3 or event.key == pygame.K_4 or event.key == pygame.K_5 or \
-                    event.key == pygame.K_6 or event.key == pygame.K_7 or event.key == pygame.K_8 or \
-                    event.key == pygame.K_9 or event.key == pygame.K_PERIOD:  # makes sure user is typing in an IP
+            elif event.unicode in valid_IP_keys:  # makes sure user is typing in an IP
                 if len(user_text) < 15:  # makes sure text will fit in box, blinks red otherwise
                     user_text += event.unicode
                 else:
-                    pygame.draw.rect(screen, red, server_ip_box, 2)
+                    pygame.draw.rect(screen, red, RECT_enter_server_IP, 2)
             elif event.key == pygame.K_RETURN:
-                attempt_connection()
+                try:
+                    attempt_connection()
+                except socket.gaierror:
+                    connection_error = 0  # invalid IP (ex. ".", "33")
+                    loading = False
+                except ConnectionRefusedError:
+                    connection_error = 1  # valid IP, port not open (server offline or connecting to a wrong IP)
+                    loading = False
+                except TimeoutError:
+                    connection_error = 1
+                    loading = False
+                except Exception as e:
+                    connection_error = e
             else:  # wrong type of character
-                pygame.draw.rect(screen, red, server_ip_box, 2)
+                pygame.draw.rect(screen, red, RECT_enter_server_IP, 2)
 
         # display the text in the box
         IP_display = monospaced_font.render(user_text, True, (0, 0, 0))
         # start at 175 (middle), decrease with every character down to 10 (edge)
-        screen.blit(IP_display, (server_ip_box.x + 175-(len(user_text)*11), server_ip_box.y + 12))
+        screen.blit(IP_display, (RECT_enter_server_IP.x + 175-(len(user_text)*11), RECT_enter_server_IP.y + 12))
         pygame.display.flip()
 
 # TODO: fix all the weirdness with the run variable, just make everything run under one condition
